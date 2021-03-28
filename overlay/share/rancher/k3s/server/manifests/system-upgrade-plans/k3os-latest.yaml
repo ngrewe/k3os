@@ -15,16 +15,15 @@ spec:
   channel: https://github.com/rancher/k3os/releases/latest
 
   # Providing a value for `version` will prevent polling/resolution of the `channel` if specified.
-  # version: v0.9.0-rc5
+  # version: v0.11.0-rc1
 
   # Select which nodes this plan can be applied to.
   nodeSelector:
     matchExpressions:
       # This limits application of this upgrade only to nodes that have opted in by applying this label.
       # Additionally, a value of `disabled` for this label on a node will cause the controller to skip over the node.
-      # NOTICE THAT THE NAME PORTION OF THIS LABEL MATCHES THE PLAN NAME. This is related to the fact that the
-      # system-upgrade-controller will tag the node with this very label having the value of the applied .status.latestHash.
-      - {key: plan.upgrade.cattle.io/k3os-latest, operator: Exists}
+      - {key: k3os.io/upgrade, operator: Exists}
+      - {key: k3os.io/upgrade, operator: NotIn, values: ["disabled"]}
       # This label is set by k3OS, therefore a node without it should not apply this upgrade.
       - {key: k3os.io/mode, operator: Exists}
       # Additionally, do not attempt to upgrade nodes booted from "live" CDROM.
@@ -34,18 +33,30 @@ spec:
   # See https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
   serviceAccountName: k3os-upgrade
 
+  # Specify which node taints should be tolerated by pods applying the upgrade.
+  # Anything specified here is appended to the default of:
+  # - {key: node.kubernetes.io/unschedulable, effect: NoSchedule, operator: Exists}
+  tolerations:
+    - {key: CriticalAddonsOnly, operator: Exists}
+    - {key: node-role.kubernetes.io/master, effect: NoSchedule, operator: Exists}
+    - {key: kubernetes.io/arch, effect: NoSchedule, operator: Equal, value: amd64}
+    - {key: kubernetes.io/arch, effect: NoSchedule, operator: Equal, value: arm64}
+    - {key: kubernetes.io/arch, effect: NoSchedule, operator: Equal, value: arm}
+
   # The prepare init container is run before cordon/drain which is run before the upgrade container.
-  # Shares the same format as the `upgrade` container
-  # prepare:
-  #   image: alpine:3.11
-  #   command: [sh, -c]
-  #   args: [" echo '### ENV ###'; env | sort; echo '### RUN ###'; find /run/system-upgrade | sort"]
+  # Shares the same format as the `upgrade` container.
+  # This formulation will incur the rancher/k3os image download prior to the drain, minimizing unavailability.
+  prepare:
+    image: rancher/k3os
+    command: [k3os, --version]
+    args: []
 
   # See https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/#use-kubectl-drain-to-remove-a-node-from-service
   drain:
     # deleteLocalData: true
     # ignoreDaemonSets: true
     force: true
+    # disableEviction: false # set this to true to bypass pod disruption budgets during drain
 
   upgrade:
     # The tag portion of the image will be overridden with the value from `.status.latestVersion` a.k.a. the resolved version.

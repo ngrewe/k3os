@@ -15,7 +15,15 @@ get_url()
     TO=$2
     case $FROM in
         ftp*|http*|tftp*)
-            curl -o $TO -fL ${FROM}
+            n=0
+            attempts=5
+            until [ "$n" -ge "$attempts" ]
+            do
+                curl -o $TO -fL ${FROM} && break
+                n=$((n+1))
+                echo "Failed to download, retry attempt ${n} out of ${attempts}"
+                sleep 2
+            done
             ;;
         *)
             cp -f $FROM $TO
@@ -30,7 +38,7 @@ cleanup2()
         umount ${TARGET} || true
     fi
 
-    losetup -d ${ISO_DEVICE} || true
+    losetup -d ${ISO_DEVICE} || losetup -d ${ISO_DEVICE%?} || true
     umount $DISTRO || true
 }
 
@@ -128,8 +136,8 @@ do_mount()
         mount ${BOOT} ${TARGET}/boot/efi
     fi
 
-    mkdir -p $DISTRO
-    mount -o ro $ISO_DEVICE $DISTRO
+    mkdir -p ${DISTRO}
+    mount -o ro ${ISO_DEVICE} ${DISTRO} || mount -o ro ${ISO_DEVICE%?} ${DISTRO}
 }
 
 do_copy()
@@ -180,16 +188,29 @@ menuentry "k3OS Current" {
 
 menuentry "k3OS Previous" {
   search.fs_label K3OS_STATE root
+  set sqfile=/k3os/system/kernel/previous/kernel.squashfs
+  loopback loop0 /\$sqfile
   set root=(\$root)
-  linux /k3os/system/kernel/previous/vmlinuz printk.devkmsg=on console=tty1 $GRUB_DEBUG
+  linux (loop0)/vmlinuz printk.devkmsg=on console=tty1 $GRUB_DEBUG
   initrd /k3os/system/kernel/previous/initrd
 }
 
-menuentry "k3OS Rescue Shell" {
+menuentry "k3OS Rescue (current)" {
   search.fs_label K3OS_STATE root
+  set sqfile=/k3os/system/kernel/current/kernel.squashfs
+  loopback loop0 /\$sqfile
   set root=(\$root)
-  linux /k3os/system/kernel/current/vmlinuz printk.devkmsg=on rescue console=tty1
+  linux (loop0)/vmlinuz printk.devkmsg=on rescue console=tty1
   initrd /k3os/system/kernel/current/initrd
+}
+
+menuentry "k3OS Rescue (previous)" {
+  search.fs_label K3OS_STATE root
+  set sqfile=/k3os/system/kernel/previous/kernel.squashfs
+  loopback loop0 /\$sqfile
+  set root=(\$root)
+  linux (loop0)/vmlinuz printk.devkmsg=on rescue console=tty1
+  initrd /k3os/system/kernel/previous/initrd
 }
 EOF
     if [ -z "${K3OS_INSTALL_TTY}" ]; then
@@ -197,7 +218,7 @@ EOF
     else
         TTY=$K3OS_INSTALL_TTY
     fi
-    if [ -e "/dev/$TTY" ] && [ "$TTY" != tty1 ] && [ "$TTY" != console ] && [ -n "$TTY" ]; then
+    if [ -e "/dev/${TTY%,*}" ] && [ "$TTY" != tty1 ] && [ "$TTY" != console ] && [ -n "$TTY" ]; then
         sed -i "s!console=tty1!console=tty1 console=${TTY}!g" ${TARGET}/boot/grub/grub.cfg
     fi
 

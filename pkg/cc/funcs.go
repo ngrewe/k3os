@@ -122,16 +122,16 @@ func ApplyK3S(cfg *config.CloudConfig, restart, install bool) error {
 			args = append(args, "server")
 		}
 	} else {
-		vars = append(vars, fmt.Sprintf("K3S_URL=\"%s\"\n", cfg.K3OS.ServerURL))
+		vars = append(vars, fmt.Sprintf("K3S_URL=%s", cfg.K3OS.ServerURL))
 		if len(args) == 0 {
 			args = append(args, "agent")
 		}
 	}
 
 	if strings.HasPrefix(cfg.K3OS.Token, "K10") {
-		vars = append(vars, fmt.Sprintf("K3S_TOKEN=\"%s\"\n", cfg.K3OS.Token))
+		vars = append(vars, fmt.Sprintf("K3S_TOKEN=%s", cfg.K3OS.Token))
 	} else if cfg.K3OS.Token != "" {
-		vars = append(vars, fmt.Sprintf("K3S_CLUSTER_SECRET=\"%s\"\n", cfg.K3OS.Token))
+		vars = append(vars, fmt.Sprintf("K3S_CLUSTER_SECRET=%s", cfg.K3OS.Token))
 	}
 
 	var labels []string
@@ -182,6 +182,7 @@ func ApplyDNS(cfg *config.CloudConfig) error {
 	buf := &bytes.Buffer{}
 	buf.WriteString("[General]\n")
 	buf.WriteString("NetworkInterfaceBlacklist=veth\n")
+	buf.WriteString("PreferredTechnologies=ethernet,wifi\n")
 	if len(cfg.K3OS.DNSNameservers) > 0 {
 		dns := strings.Join(cfg.K3OS.DNSNameservers, ",")
 		buf.WriteString("FallbackNameservers=")
@@ -243,10 +244,6 @@ func ApplyWifi(cfg *config.CloudConfig) error {
 		buf.WriteString("\n")
 		buf.WriteString("Name=")
 		buf.WriteString(w.Name)
-		buf.WriteString("\n")
-		buf.WriteString("AutoConnect=true")
-		buf.WriteString("\n")
-		buf.WriteString("Favorite=true")
 		buf.WriteString("\n")
 	}
 
